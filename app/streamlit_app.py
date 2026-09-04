@@ -1,19 +1,8 @@
 """
 NetOracle - Real Network Attack Forecasting Dashboard
-
-Fully offline Streamlit interface.
-
-Real CIC-IDS-2018 CSV
-        ->
-10-second network states
-        ->
-Temporal World Model
-        ->
-K-step future simulation
-        ->
-Attack probability + MITRE stage + explanation
 """
 
+import json
 import os
 import sys
 import tempfile
@@ -23,9 +12,10 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
-# ---------------------------------------------------------
-# Project imports
-# ---------------------------------------------------------
+
+# ============================================================
+# PROJECT IMPORTS
+# ============================================================
 
 PROJECT_ROOT = os.path.dirname(
     os.path.dirname(
@@ -34,19 +24,16 @@ PROJECT_ROOT = os.path.dirname(
 )
 
 if PROJECT_ROOT not in sys.path:
-    sys.path.insert(
-        0,
-        PROJECT_ROOT
-    )
+    sys.path.insert(0, PROJECT_ROOT)
 
 from src.inference import NetOracleInference
 from src.mitre_mapper import MITREMapper
 from src.explainer import WorldModelExplainer
 
 
-# =========================================================
-# PAGE CONFIGURATION
-# =========================================================
+# ============================================================
+# PAGE
+# ============================================================
 
 st.set_page_config(
     page_title="NetOracle",
@@ -55,116 +42,103 @@ st.set_page_config(
 )
 
 
-# =========================================================
-# STYLE
-# =========================================================
-
 st.markdown(
     """
-    <style>
-        .block-container {
-            padding-top: 2rem;
-        }
+<style>
+.block-container {
+    padding-top: 2rem;
+}
 
-        .main-title {
-            font-size: 2.5rem;
-            font-weight: 800;
-        }
+.main-title {
+    font-size: 2.6rem;
+    font-weight: 800;
+}
 
-        .subtitle {
-            color: #9ca3af;
-            font-size: 1rem;
-            margin-bottom: 1.5rem;
-        }
+.subtitle {
+    color: #9ca3af;
+    margin-bottom: 1.5rem;
+}
 
-        .critical-box {
-            border-left: 5px solid #ef4444;
-            padding: 15px;
-            background-color: rgba(239,68,68,0.08);
-            border-radius: 8px;
-        }
+.critical-box {
+    border-left: 5px solid #ef4444;
+    padding: 16px;
+    background: rgba(239,68,68,0.08);
+    border-radius: 8px;
+}
 
-        .safe-box {
-            border-left: 5px solid #22c55e;
-            padding: 15px;
-            background-color: rgba(34,197,94,0.08);
-            border-radius: 8px;
-        }
-    </style>
-    """,
+.safe-box {
+    border-left: 5px solid #22c55e;
+    padding: 16px;
+    background: rgba(34,197,94,0.08);
+    border-radius: 8px;
+}
+</style>
+""",
     unsafe_allow_html=True,
 )
 
 
-# =========================================================
-# LOAD MODEL ONCE
-# =========================================================
+# ============================================================
+# MODEL
+# ============================================================
 
 @st.cache_resource
 def load_engine():
 
     return NetOracleInference(
-        model_path=
-            "models/best_world_model.pth",
-
-        config_path=
-            "configs/config.yaml",
+        model_path="models/best_world_model.pth",
+        config_path="configs/config.yaml",
     )
 
 
 try:
-
     engine = load_engine()
-
     model_ready = True
 
 except Exception as error:
-
+    engine = None
     model_ready = False
 
     st.error(
-        f"Failed to load model: {error}"
+        f"Failed to load trained model: {error}"
     )
 
 
-# =========================================================
+# ============================================================
 # HEADER
-# =========================================================
+# ============================================================
 
 st.markdown(
-    '<div class="main-title">'
-    '🛡️ NetOracle'
-    '</div>',
+    '<div class="main-title">🛡️ NetOracle</div>',
     unsafe_allow_html=True,
 )
 
 st.markdown(
     """
-    <div class="subtitle">
-    World Model based predictive cyber defence —
-    forecasting network attack progression before compromise.
-    </div>
-    """,
+<div class="subtitle">
+AI World Model for predictive cyber defence —
+learning network-state dynamics and forecasting attack
+progression before compromise.
+</div>
+""",
     unsafe_allow_html=True,
 )
 
 
 if model_ready:
 
-    device_name = str(
-        engine.device
-    )
-
     st.caption(
-        f"Model status: Loaded | "
-        f"Device: {device_name.upper()} | "
-        f"Forecast horizon: 50 seconds"
+        f"Model: Loaded | "
+        f"Device: {str(engine.device).upper()} | "
+        f"Context: 200 seconds | "
+        f"Forecast: 50 seconds | "
+        f"Alert threshold: {engine.threshold:.2f}"
     )
 
 
-# =========================================================
+# ============================================================
 # TABS
-# =========================================================
+# ============================================================
 
 tabs = st.tabs(
     [
@@ -177,43 +151,59 @@ tabs = st.tabs(
 )
 
 
-# =========================================================
+# ============================================================
 # TAB 1 — REAL TRAFFIC
-# =========================================================
+# ============================================================
 
 with tabs[0]:
 
     st.subheader(
-        "Real CIC-IDS-2018 Traffic Analysis"
+        "Real Network Traffic Forecast"
     )
 
     st.write(
         "Upload a CIC-IDS-2018 flow CSV. "
-        "NetOracle converts it into real "
-        "10-second network states and performs "
-        "recursive future simulation."
+        "NetOracle converts flows into real 10-second "
+        "network states and repeatedly simulates the "
+        "next 50 seconds of network evolution."
     )
 
-    uploaded_file = st.file_uploader(
-        "Upload CIC-IDS-2018 CSV",
-        type=["csv"],
+    col_controls, col_info = st.columns(
+        [2, 1]
     )
 
-    demo_mode = st.checkbox(
-        "Use local held-out infiltration demo",
-        value=False,
-    )
+    with col_controls:
 
-    stride = st.slider(
-        "Timeline prediction interval",
-        min_value=1,
-        max_value=20,
-        value=5,
-        help=(
-            "5 = generate one forecast "
-            "every 50 seconds."
-        ),
-    )
+        uploaded_file = st.file_uploader(
+            "Upload CIC-IDS-2018 CSV",
+            type=["csv"],
+        )
+
+        demo_mode = st.checkbox(
+            "Use local held-out infiltration demo",
+            value=False,
+        )
+
+        stride = st.slider(
+            "Forecast interval",
+            min_value=1,
+            max_value=20,
+            value=5,
+            help=(
+                "Each state is 10 seconds. "
+                "Stride 5 generates a new forecast "
+                "every 50 seconds."
+            ),
+        )
+
+    with col_info:
+
+        st.info(
+            "Observation window: 200 sec\n\n"
+            "Forecast horizon: 50 sec\n\n"
+            "State dimension: 85\n\n"
+            "Execution: Offline"
+        )
 
     run_analysis = st.button(
         "🚀 Analyze Traffic",
@@ -225,7 +215,7 @@ with tabs[0]:
         if not model_ready:
 
             st.error(
-                "Model is not available."
+                "The trained World Model is unavailable."
             )
 
         elif (
@@ -234,8 +224,8 @@ with tabs[0]:
         ):
 
             st.warning(
-                "Upload a CSV or enable "
-                "the held-out demo."
+                "Upload a CSV or enable the "
+                "local held-out demo."
             )
 
         else:
@@ -244,9 +234,9 @@ with tabs[0]:
 
             try:
 
-                # -----------------------------------------
-                # Choose data source
-                # -----------------------------------------
+                # --------------------------------------------
+                # DATA SOURCE
+                # --------------------------------------------
 
                 if demo_mode:
 
@@ -271,79 +261,65 @@ with tabs[0]:
 
                 else:
 
-                    suffix = ".csv"
-
                     with tempfile.NamedTemporaryFile(
                         delete=False,
-                        suffix=suffix,
-                    ) as temporary_file:
+                        suffix=".csv",
+                    ) as temp_file:
 
-                        temporary_file.write(
+                        temp_file.write(
                             uploaded_file.getbuffer()
                         )
 
-                        temp_path = (
-                            temporary_file.name
-                        )
+                        temp_path = temp_file.name
 
                     csv_path = temp_path
                     start_time = None
                     end_time = None
+                    source_name = uploaded_file.name
 
-                    source_name = (
-                        uploaded_file.name
-                    )
-
-                # -----------------------------------------
-                # Run REAL model
-                # -----------------------------------------
+                # --------------------------------------------
+                # REAL INFERENCE
+                # --------------------------------------------
 
                 with st.spinner(
-                    "Building network states and "
-                    "running temporal world model..."
+                    "Extracting network states and "
+                    "running recursive World Model simulation..."
                 ):
 
-                    timeline = (
-                        engine.predict_timeline(
-                            csv_path,
-                            start_time=
-                                start_time,
-
-                            end_time=
-                                end_time,
-
-                            stride=
-                                stride,
-                        )
+                    timeline = engine.predict_timeline(
+                        csv_path,
+                        start_time=start_time,
+                        end_time=end_time,
+                        stride=stride,
                     )
 
-                risks = (
-                    timeline[
-                        "risk_timeline"
-                    ]
-                )
+                risks = timeline[
+                    "risk_timeline"
+                ]
 
-                stages = (
-                    timeline[
-                        "stage_timeline"
-                    ]
-                )
+                stages = timeline[
+                    "stage_timeline"
+                ]
+
+                observed = timeline[
+                    "observed_timeline"
+                ]
 
                 threshold = float(
-                    timeline[
-                        "threshold"
-                    ]
+                    timeline["threshold"]
                 )
 
-                observed = (
-                    timeline[
-                        "observed_timeline"
-                    ]
-                )
+                if len(risks) == 0:
 
-                # -----------------------------------------
-                # Summary metrics
-                # -----------------------------------------
+                    raise RuntimeError(
+                        "No forecasts were generated. "
+                        "The uploaded file may contain too "
+                        "little traffic."
+                    )
+
+                # --------------------------------------------
+                # SUMMARY
+                # --------------------------------------------
 
                 max_risk = float(
                     np.max(risks)
@@ -359,16 +335,17 @@ with tabs[0]:
                     )
                 )
 
-                dominant_stage = int(
-                    stages[
-                        np.argmax(risks)
-                    ]
+                peak_index = int(
+                    np.argmax(risks)
                 )
 
-                stage_info = (
-                    MITREMapper
-                    .get_stage_info(
-                        dominant_stage
+                peak_stage = int(
+                    stages[peak_index]
+                )
+
+                peak_info = (
+                    MITREMapper.get_stage_info(
+                        peak_stage
                     )
                 )
 
@@ -376,39 +353,37 @@ with tabs[0]:
                     f"Analyzed: {source_name}"
                 )
 
-                col1, col2, col3, col4 = (
-                    st.columns(4)
-                )
+                c1, c2, c3, c4 = st.columns(4)
 
-                col1.metric(
+                c1.metric(
                     "Maximum Forecast Risk",
                     f"{max_risk:.1%}",
                 )
 
-                col2.metric(
+                c2.metric(
                     "Mean Forecast Risk",
                     f"{mean_risk:.1%}",
                 )
 
-                col3.metric(
+                c3.metric(
                     "Forecast Alerts",
                     alert_count,
                 )
 
-                col4.metric(
+                c4.metric(
                     "Highest-Risk Stage",
-                    stage_info["name"],
+                    peak_info["name"],
                 )
 
-                # -----------------------------------------
-                # Risk timeline
-                # -----------------------------------------
+                # --------------------------------------------
+                # RISK TIMELINE
+                # --------------------------------------------
 
                 st.subheader(
                     "Forecast Risk Timeline"
                 )
 
-                x_axis = np.arange(
+                x = np.arange(
                     len(risks)
                 )
 
@@ -416,36 +391,30 @@ with tabs[0]:
 
                 fig.add_trace(
                     go.Scatter(
-                        x=x_axis,
+                        x=x,
                         y=risks,
                         mode="lines",
-                        name=
-                            "Predicted future risk",
-
+                        name="Predicted Future Risk",
                         line=dict(
                             color="#ef4444",
                             width=2,
                         ),
-
                         fill="tozeroy",
-
-                        fillcolor=
-                            "rgba(239,68,68,0.12)",
+                        fillcolor=(
+                            "rgba(239,68,68,0.12)"
+                        ),
                     )
                 )
 
                 fig.add_trace(
                     go.Scatter(
-                        x=x_axis,
-                        y=[
-                            threshold
-                        ] * len(risks),
-
+                        x=x,
+                        y=np.full(
+                            len(x),
+                            threshold,
+                        ),
                         mode="lines",
-
-                        name=
-                            "Alert threshold",
-
+                        name="Alert Threshold",
                         line=dict(
                             color="#f59e0b",
                             width=2,
@@ -454,32 +423,24 @@ with tabs[0]:
                     )
                 )
 
-                # Observed ground-truth markers.
-                attack_points = (
-                    np.where(
-                        observed == 1
-                    )[0]
-                )
+                malicious_points = np.where(
+                    observed == 1
+                )[0]
 
-                if len(
-                    attack_points
-                ) > 0:
+                if len(malicious_points):
 
                     fig.add_trace(
                         go.Scatter(
-                            x=attack_points,
-
+                            x=malicious_points,
                             y=np.ones(
                                 len(
-                                    attack_points
+                                    malicious_points
                                 )
                             ),
-
                             mode="markers",
-
-                            name=
-                                "Observed malicious state",
-
+                            name=(
+                                "Observed Malicious State"
+                            ),
                             marker=dict(
                                 color="#a855f7",
                                 size=6,
@@ -490,14 +451,17 @@ with tabs[0]:
                 fig.update_layout(
                     template="plotly_dark",
                     height=430,
-                    xaxis_title=
-                        "Chronological forecast step",
-
-                    yaxis_title=
-                        "Infiltration probability",
-
+                    xaxis_title=(
+                        "Chronological Forecast Step"
+                    ),
+                    yaxis_title=(
+                        "Attack Probability"
+                    ),
                     yaxis=dict(
                         range=[0, 1]
+                    ),
+                    legend=dict(
+                        orientation="h"
                     ),
                 )
 
@@ -506,104 +470,77 @@ with tabs[0]:
                     use_container_width=True,
                 )
 
-                # -----------------------------------------
-                # Stage timeline
-                # -----------------------------------------
+                # --------------------------------------------
+                # MITRE TIMELINE
+                # --------------------------------------------
 
                 st.subheader(
-                    "Predicted MITRE Stage Timeline"
+                    "Predicted MITRE ATT&CK Timeline"
                 )
 
                 stage_names = [
-                    MITREMapper
-                    .get_stage_name(
+
+                    MITREMapper.get_stage_name(
                         int(stage)
                     )
 
                     for stage in stages
                 ]
 
-                stage_df = pd.DataFrame(
+                stage_table = pd.DataFrame(
                     {
-                        "Forecast":
-                            x_axis,
+                        "Forecast Step":
+                            x,
 
-                        "Risk":
+                        "Forecast Risk":
                             risks,
 
                         "MITRE Stage":
                             stage_names,
 
                         "Alert":
-                            risks
-                            >= threshold,
+                            risks >= threshold,
                     }
                 )
 
                 st.dataframe(
-                    stage_df,
+                    stage_table,
                     use_container_width=True,
                     height=300,
                 )
 
-                # -----------------------------------------
-                # Most dangerous point
-                # -----------------------------------------
+                # --------------------------------------------
+                # DECISION SUPPORT
+                # --------------------------------------------
 
-                peak_index = int(
-                    np.argmax(risks)
-                )
-
-                peak_stage = int(
-                    stages[
-                        peak_index
-                    ]
-                )
-
-                peak_info = (
-                    MITREMapper
-                    .get_stage_info(
-                        peak_stage
-                    )
-                )
-
-                if (
-                    max_risk
-                    >= threshold
-                ):
+                if max_risk >= threshold:
 
                     st.markdown(
                         f"""
-                        <div class="critical-box">
+<div class="critical-box">
 
-                        <h3>
-                        ⚠️ Predictive Security Alert
-                        </h3>
+<h3>⚠️ Predictive Security Alert</h3>
 
-                        <b>
-                        Predicted risk:
-                        {max_risk:.1%}
-                        </b>
+<b>Peak predicted risk:</b>
+{max_risk:.1%}
 
-                        <br>
+<br>
 
-                        Predicted stage:
-                        <b>
-                        {peak_info['name']}
-                        </b>
+<b>Predicted attack stage:</b>
+{peak_info['name']}
 
-                        <br>
+<br>
 
-                        MITRE tactic:
-                        {peak_info['mitre_id']}
+<b>MITRE tactic:</b>
+{peak_info['mitre_id']}
 
-                        <br><br>
+<br><br>
 
-                        Recommended action:
-                        {peak_info['recommended_action']}
+<b>Recommended defensive action:</b><br>
+{peak_info['recommended_action']}
 
-                        </div>
-                        """,
+</div>
+""",
                         unsafe_allow_html=True,
                     )
 
@@ -611,13 +548,15 @@ with tabs[0]:
 
                     st.markdown(
                         """
-                        <div class="safe-box">
-                        <h3>
-                        ✅ No Forecast Threshold Exceeded
-                        </h3>
-                        Continue monitoring.
-                        </div>
-                        """,
+<div class="safe-box">
+
+<h3>✅ No Forecast Threshold Exceeded</h3>
+
+No future attack trajectory exceeded the
+configured alert threshold.
+
+</div>
+""",
                         unsafe_allow_html=True,
                     )
 
@@ -628,109 +567,243 @@ with tabs[0]:
             finally:
 
                 if (
-                    temp_path is not None
+                    temp_path
                     and os.path.exists(
                         temp_path
                     )
                 ):
 
-                    os.remove(
-                        temp_path
-                    )
+                    try:
+                        os.remove(
+                            temp_path
+                        )
+
+                    except OSError:
+                        pass
 
 
-# =========================================================
+# ============================================================
 # TAB 2 — BENCHMARK
-# =========================================================
+# ============================================================
 
 with tabs[1]:
 
     st.subheader(
-        "Temporal World Model vs Static Baseline"
+        "World Model vs Static Classifier"
     )
 
     st.write(
-        "Both models were evaluated on the "
-        "same chronologically held-out traffic."
+        "Both systems are evaluated on the same "
+        "chronologically held-out network traffic."
     )
 
-    comparison = pd.DataFrame(
-        {
-            "Metric": [
-                "F1 Score",
-                "AUC-ROC",
-                "Precision",
-                "Recall",
-                "False Positive Rate",
-            ],
-
-            "World Model": [
-                0.6941,
-                0.8323,
-                0.6201,
-                0.7882,
-                0.3436,
-            ],
-
-            "Logistic Regression": [
-                0.5834,
-                0.6355,
-                0.4863,
-                0.7289,
-                0.5478,
-            ],
-        }
+    benchmark_path = (
+        "models/final_benchmark.json"
     )
 
-    st.dataframe(
-        comparison,
-        use_container_width=True,
-    )
+    if os.path.exists(
+        benchmark_path
+    ):
 
-    fig = go.Figure()
+        try:
 
-    fig.add_trace(
-        go.Bar(
-            name="World Model",
-            x=comparison["Metric"],
-            y=comparison["World Model"],
-            marker_color="#22c55e",
+            with open(
+                benchmark_path,
+                "r",
+            ) as file:
+
+                benchmark = json.load(
+                    file
+                )
+
+            world = benchmark[
+                "world_model_T+1"
+            ]
+
+            baseline = benchmark[
+                "logistic_regression_T+1"
+            ]
+
+            comparison = pd.DataFrame(
+                {
+                    "Metric": [
+                        "F1 Score",
+                        "AUC-ROC",
+                        "Precision",
+                        "Recall",
+                        "False Positive Rate",
+                    ],
+
+                    "World Model": [
+                        world[
+                            "f1_score"
+                        ],
+                        world[
+                            "auc_roc"
+                        ],
+                        world[
+                            "precision"
+                        ],
+                        world[
+                            "recall"
+                        ],
+                        world[
+                            "false_positive_rate"
+                        ],
+                    ],
+
+                    "Logistic Regression": [
+                        baseline[
+                            "f1_score"
+                        ],
+                        baseline[
+                            "auc_roc"
+                        ],
+                        baseline[
+                            "precision"
+                        ],
+                        baseline[
+                            "recall"
+                        ],
+                        baseline[
+                            "false_positive_rate"
+                        ],
+                    ],
+                }
+            )
+
+            # --------------------------------------------
+            # KEY METRICS
+            # --------------------------------------------
+
+            f1_improvement = (
+                (
+                    world["f1_score"]
+                    - baseline["f1_score"]
+                )
+                / baseline["f1_score"]
+                * 100
+            )
+
+            auc_improvement = (
+                (
+                    world["auc_roc"]
+                    - baseline["auc_roc"]
+                )
+                / baseline["auc_roc"]
+                * 100
+            )
+
+            fpr_reduction = (
+                (
+                    baseline[
+                        "false_positive_rate"
+                    ]
+                    - world[
+                        "false_positive_rate"
+                    ]
+                )
+                / baseline[
+                    "false_positive_rate"
+                ]
+                * 100
+            )
+
+            c1, c2, c3 = st.columns(3)
+
+            c1.metric(
+                "Relative F1 Improvement",
+                f"+{f1_improvement:.1f}%",
+            )
+
+            c2.metric(
+                "Relative AUC Improvement",
+                f"+{auc_improvement:.1f}%",
+            )
+
+            c3.metric(
+                "Relative FPR Reduction",
+                f"{fpr_reduction:.1f}%",
+            )
+
+            st.dataframe(
+                comparison,
+                use_container_width=True,
+            )
+
+            # --------------------------------------------
+            # GRAPH
+            # --------------------------------------------
+
+            fig = go.Figure()
+
+            fig.add_trace(
+                go.Bar(
+                    name="World Model",
+                    x=comparison["Metric"],
+                    y=comparison[
+                        "World Model"
+                    ],
+                    marker_color="#22c55e",
+                )
+            )
+
+            fig.add_trace(
+                go.Bar(
+                    name=(
+                        "Logistic Regression"
+                    ),
+                    x=comparison["Metric"],
+                    y=comparison[
+                        "Logistic Regression"
+                    ],
+                    marker_color="#64748b",
+                )
+            )
+
+            fig.update_layout(
+                barmode="group",
+                template="plotly_dark",
+                height=430,
+                yaxis_title="Score",
+            )
+
+            st.plotly_chart(
+                fig,
+                use_container_width=True,
+            )
+
+            st.info(
+                "The temporal World Model achieves "
+                "higher F1, AUC and recall than the "
+                "static Logistic Regression baseline "
+                "while reducing its false-positive rate."
+            )
+
+            st.caption(
+                "Note: The current prototype still has "
+                "a non-trivial absolute false-positive "
+                "rate. Further calibration is required "
+                "for production deployment."
+            )
+
+        except Exception as error:
+
+            st.error(
+                f"Could not read benchmark: {error}"
+            )
+
+    else:
+
+        st.warning(
+            "models/final_benchmark.json "
+            "was not found."
         )
-    )
-
-    fig.add_trace(
-        go.Bar(
-            name="Logistic Regression",
-            x=comparison["Metric"],
-            y=comparison[
-                "Logistic Regression"
-            ],
-            marker_color="#64748b",
-        )
-    )
-
-    fig.update_layout(
-        barmode="group",
-        template="plotly_dark",
-        height=430,
-    )
-
-    st.plotly_chart(
-        fig,
-        use_container_width=True,
-    )
-
-    st.info(
-        "The temporal World Model improves "
-        "T+1 F1 and AUC while substantially "
-        "reducing false-positive rate compared "
-        "with a static Logistic Regression model."
-    )
 
 
-# =========================================================
+# ============================================================
 # TAB 3 — EXPLAINABILITY
-# =========================================================
+# ============================================================
 
 with tabs[2]:
 
@@ -739,12 +812,18 @@ with tabs[2]:
     )
 
     st.write(
-        "NetOracle uses input-gradient attribution "
-        "to estimate which network-state features "
-        "most influence the predicted attack risk."
+        "Input-gradient attribution estimates which "
+        "traffic-state features most strongly influence "
+        "the model's future attack prediction."
     )
 
-    if model_ready:
+    if not model_ready:
+
+        st.warning(
+            "Model unavailable."
+        )
+
+    else:
 
         demo_file = (
             "data/raw/"
@@ -753,100 +832,118 @@ with tabs[2]:
         )
 
         if st.button(
-            "Generate Real Traffic Explanation"
+            "🔍 Generate Real Traffic Explanation"
         ):
 
-            try:
+            if not os.path.exists(
+                demo_file
+            ):
 
-                with st.spinner(
-                    "Calculating feature attribution..."
-                ):
+                st.warning(
+                    "Local CIC-IDS demo dataset "
+                    "is not available."
+                )
 
-                    prepared = (
-                        engine.prepare_csv(
-                            demo_file,
+            else:
 
-                            start_time=
-                                "2018-02-28 10:00:00",
+                try:
 
-                            end_time=
-                                "2018-02-28 12:00:00",
+                    with st.spinner(
+                        "Computing feature attribution..."
+                    ):
+
+                        prepared = (
+                            engine.prepare_csv(
+
+                                demo_file,
+
+                                start_time=
+                                    "2018-02-28 10:00:00",
+
+                                end_time=
+                                    "2018-02-28 12:00:00",
+                            )
+                        )
+
+                        explainer = (
+                            WorldModelExplainer(
+
+                                engine.model,
+
+                                engine.feature_names,
+                            )
+                        )
+
+                        features = (
+                            explainer
+                            .get_top_features(
+
+                                prepared[
+                                    "input_tensor"
+                                ],
+
+                                top_k=10,
+                            )
+                        )
+
+                    names = [
+                        item[0]
+                        for item in features
+                    ]
+
+                    scores = [
+                        item[1]
+                        for item in features
+                    ]
+
+                    fig = go.Figure(
+                        go.Bar(
+                            x=scores,
+                            y=names,
+                            orientation="h",
+                            marker=dict(
+                                color=scores,
+                                colorscale="Reds",
+                            ),
                         )
                     )
 
-                    explainer = (
-                        WorldModelExplainer(
-                            engine.model,
-                            engine.feature_names,
-                        )
-                    )
-
-                    features = (
-                        explainer.get_top_features(
-                            prepared[
-                                "input_tensor"
-                            ],
-                            top_k=10,
-                        )
-                    )
-
-                feature_names = [
-                    item[0]
-                    for item in features
-                ]
-
-                scores = [
-                    item[1]
-                    for item in features
-                ]
-
-                fig = go.Figure(
-                    go.Bar(
-                        x=scores,
-                        y=feature_names,
-                        orientation="h",
-
-                        marker=dict(
-                            color=scores,
-                            colorscale="Reds",
+                    fig.update_layout(
+                        template="plotly_dark",
+                        height=450,
+                        title=(
+                            "Features Driving "
+                            "the Attack Forecast"
+                        ),
+                        xaxis_title=(
+                            "Attribution Magnitude"
+                        ),
+                        yaxis=dict(
+                            autorange="reversed"
                         ),
                     )
-                )
 
-                fig.update_layout(
-                    template="plotly_dark",
-                    height=450,
+                    st.plotly_chart(
+                        fig,
+                        use_container_width=True,
+                    )
 
-                    title=
-                        "Features Driving the Forecast",
+                    st.info(
+                        "Higher attribution means the "
+                        "feature had a stronger influence "
+                        "on the model's predicted risk. "
+                        "Attribution indicates model "
+                        "influence, not proof of causality."
+                    )
 
-                    xaxis_title=
-                        "Attribution magnitude",
+                except Exception as error:
 
-                    yaxis=dict(
-                        autorange="reversed"
-                    ),
-                )
-
-                st.plotly_chart(
-                    fig,
-                    use_container_width=True,
-                )
-
-                st.caption(
-                    "Higher attribution indicates "
-                    "greater influence on the "
-                    "forecasted attack probability."
-                )
-
-            except Exception as error:
-
-                st.exception(error)
+                    st.exception(error)
 
 
-# =========================================================
-# TAB 4 — MITRE
-# =========================================================
+# ============================================================
+# TAB 4 — MITRE ATT&CK
+# ============================================================
 
 with tabs[3]:
 
@@ -854,18 +951,25 @@ with tabs[3]:
         "MITRE ATT&CK Decision Support"
     )
 
+    st.caption(
+        "CIC-IDS attack labels are mapped to "
+        "prototype defensive ATT&CK stages. "
+        "These are semantic mappings, not native "
+        "ground-truth MITRE annotations."
+    )
+
     for stage_id in range(7):
 
         info = (
-            MITREMapper
-            .get_stage_info(
+            MITREMapper.get_stage_info(
                 stage_id
             )
         )
 
         with st.expander(
             f"{info['name']} "
-            f"({info['mitre_id']})"
+            f"({info['mitre_id']}) "
+            f"— Severity {info['severity']}/10"
         ):
 
             st.write(
@@ -873,77 +977,120 @@ with tabs[3]:
             )
 
             st.write(
-                "**Severity:**",
-                f"{info['severity']}/10",
+                "**Recommended Action:**"
             )
 
             st.write(
-                "**Recommended Action:**",
                 info[
                     "recommended_action"
-                ],
+                ]
             )
 
+            if (
+                "techniques"
+                in info
+            ):
 
-# =========================================================
+                st.write(
+                    "**Representative Techniques:**"
+                )
+
+                for technique in info[
+                    "techniques"
+                ]:
+
+                    st.write(
+                        f"- {technique}"
+                    )
+
+
+# ============================================================
 # TAB 5 — ARCHITECTURE
-# =========================================================
+# ============================================================
 
 with tabs[4]:
 
     st.subheader(
-        "World Model Architecture"
+        "NetOracle World Model"
     )
 
     st.code(
         """
 Real CIC-IDS-2018 Flow Telemetry
-             │
-             ▼
-     10-second Network States
-             │
-             ▼
-        State Encoder
-             │
-             ▼
- Causal Temporal Transformer
-             │
-             ▼
+               |
+               v
+       10-second States
+               |
+               v
+          State Encoder
+               |
+               v
+   Causal Temporal Transformer
+               |
+               v
        Latent State Z(t)
-             │
-             ▼
+               |
+               v
   Learned Transition Dynamics
-             │
-       ┌─────┴─────┐
-       ▼           ▼
-    Z(t+1)      Network State
-       │
-       ├────────► Attack Probability
-       │
-       └────────► MITRE Stage
-       │
-       ▼
-    Z(t+2)
-       │
-      ...
-       ▼
-    Z(t+5)
+               |
+          +----+----+
+          |         |
+          v         v
+      Z(t+1)   Future Network State
+          |
+          +----> Attack Probability
+          |
+          +----> MITRE Stage
+          |
+          v
+      Z(t+2)
+          |
+         ...
+          |
+          v
+      Z(t+5)
 
-Observed context : 200 seconds
-Forecast horizon : 50 seconds
-        """
+Historical context : 20 states = 200 seconds
+Forecast horizon   : 5 states  = 50 seconds
+Network state      : 85 dimensions
+        """,
+        language="text",
     )
 
     st.markdown(
         """
-        Key properties:
+Key properties:
 
-        - Recursive K-step future simulation
-        - Causal Transformer attention
-        - Training-only normalization
-        - Chronological train/validation/test separation
-        - MITRE ATT&CK decision support
-        - Explainable feature attribution
-        - Fully offline inference
+- Real timestamp-based network states
+- 200-second temporal observation context
+- Recursive five-step future simulation
+- Causal Transformer representation
+- Learned latent state-transition dynamics
+- Multi-task future-state, risk and stage prediction
+- Training-only normalization
+- Chronological evaluation
+- Explainable feature attribution
+- Offline execution
         """
+    )
+
+    st.subheader(
+        "Why this is different from a classifier"
+    )
+
+    st.write(
+        "A static classifier asks: "
+        "'Is the current flow malicious?' "
+        "NetOracle instead asks: "
+        "'Given how the network has evolved over the "
+        "last 200 seconds, what states are likely to "
+        "occur during the next 50 seconds?'"
+    )
+
+    st.warning(
+        "Prototype limitation: the current model "
+        "primarily uses CICFlowMeter flow-level "
+        "telemetry. Packet-level PCAP feature support "
+        "is being developed as a separate ingestion "
+        "pipeline."
     )

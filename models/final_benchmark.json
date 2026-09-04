@@ -1,0 +1,29 @@
+{
+  "dataset": "CIC-IDS-2018",
+  "state_window_seconds": 10,
+  "history_seconds": 200,
+  "forecast_horizon_seconds": 50,
+  "world_model_T+1": {
+    "accuracy": 0.7112,
+    "precision": 0.6201,
+    "recall": 0.7882,
+    "f1_score": 0.6941,
+    "auc_roc": 0.8323,
+    "false_positive_rate": 0.3436
+  },
+  "logistic_regression_T+1": {
+    "accuracy": 0.5672348485,
+    "precision": 0.4863221884,
+    "recall": 0.728929385,
+    "f1_score": 0.5834092981,
+    "auc_roc": 0.6354725452,
+    "false_positive_rate": 0.5478119935
+  },
+  "mitre_stage": {
+    "accuracy": 0.7261,
+    "macro_f1": 0.7131,
+    "weighted_f1": 0.7234
+  },
+  "synthetic_data_used": false,
+  "note": "World Model and Logistic Regression evaluated on the same chronological held-out traffic; threshold selection uses validation data."
+}
