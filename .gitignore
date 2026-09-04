@@ -1,27 +1,22 @@
-# Python
-__pycache__/
-*.py[cod]
-*$py.class
-*.so
-.Python
+# Virtual environments
 venv/
 .venv/
-env/
-*.egg-info/
-dist/
-build/
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Real datasets - DO NOT upload
+data/
+*.csv
+*.pcap
+*.pcapng
 
 # IDE
 .vscode/
-.idea/
-*.swp
-*.swo
 
-# Large files
+# Model checkpoints
 *.pth
-*.h5
-*.pkl
 
-# Keep these (models are small)
-# models/best_world_model.pth
-# models/evaluation_results.json
+# Temporary files
+*.tmp

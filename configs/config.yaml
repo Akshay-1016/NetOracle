@@ -5,14 +5,14 @@ data:
   forecast_horizon: 5
 
 model:
-  state_dim: 64
-  hidden_dim: 128
-  num_heads: 4
-  num_layers: 3
-  dropout: 0.1
-  learning_rate: 0.001
-  batch_size: 64
-  epochs: 25
+  state_dim: 128
+  hidden_dim: 256
+  num_heads: 8
+  num_layers: 4
+  dropout: 0.15
+  learning_rate: 0.0003
+  batch_size: 128
+  epochs: 40
 
 mitre_stages:
   0: "Benign"
